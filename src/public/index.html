@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ai-gijiroku</title>
+</head>
+<body>
+    <div>
+        <h1>動画をアップロード</h1>
+        <form>
+            <input type="file" id="file_name" name="file" accept="video/mp4" />
+            <button type="submit">アップロード</button>
+        </form>
+    </div>
+
+    <script>
+        const form = document.querySelector('form')
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('file_name');
+            const file = fileInput.files[0];
+            if (!file) {
+                console.error("ファイルが選択されていません");
+                return;
+            }
+
+            const encodedFileName = encodeURIComponent(file.name);
+            const renamedFile = new File([file], encodedFileName, { type: file.type });
+            const formData = new FormData();
+            formData.append('file', renamedFile);
+        
+            fetch("/api/videoes", {
+                method: "POST",
+                body: formData,
+            })
+        })
+    </script>
+</body>
+</html>
