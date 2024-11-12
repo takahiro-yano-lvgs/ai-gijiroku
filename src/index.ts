@@ -2,10 +2,12 @@ import express from "express";
 import path from "path";
 import multer from "multer";
 import fs from "fs";
+import ffmpeg from "fluent-ffmpeg";
 
 const app = express();
 const PORT = 3000;
 const UPLOAD_DIR = path.join(__dirname, "public/uploads");
+const AUDIO_DIR = path.join(__dirname, "public/audio");
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -19,23 +21,45 @@ const storage = multer.diskStorage({
   filename: function (req, file, cb) {
     cb(null, decodeURIComponent(file.originalname));
   },
-})
+});
 
-const upload = multer({ storage, fileFilter(req, file, cb) {
-  if (file.mimetype === "video/mp4") {
-    cb(null, true);
-    return;
-  } else {
-    cb(new Error("Invalid file type"));
-  }
-}, });
+const upload = multer({
+  storage,
+  fileFilter(req, file, cb) {
+    if (file.mimetype === "video/mp4") {
+      cb(null, true);
+      return;
+    } else {
+      cb(new Error("Invalid file type"));
+    }
+  },
+});
+
+const convert_video_to_audio = (input_file: string, output_file: string) => {
+  ffmpeg(input_file).toFormat("mp3").save(output_file);
+};
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
 app.post("/api/videoes", upload.single("file"), (req, res) => {
-  res.redirect(301, "/");
+  try {
+    if (!req.file) {
+      res.status(400).send("No file uploaded");
+      return;
+    }
+
+    fs.mkdirSync(AUDIO_DIR, { recursive: true });
+    convert_video_to_audio(
+      path.join(UPLOAD_DIR, req.file.filename),
+      path.join(AUDIO_DIR, req.file.filename.replace(".mp4", ".mp3"))
+    );
+
+    res.redirect(301, "/");
+  } catch (error) {
+    res.status(500).send(error);
+  }
 });
 
 app.listen(PORT, () => {
