@@ -16,7 +16,7 @@
 
     <script>
         const form = document.querySelector('form')
-        form.addEventListener('submit', (e) => {
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const fileInput = document.getElementById('file_name');
             const file = fileInput.files[0];
@@ -30,10 +30,21 @@
             const formData = new FormData();
             formData.append('file', renamedFile);
         
-            fetch("/api/videoes", {
-                method: "POST",
-                body: formData,
-            })
+            try {
+                //TODO:アップロード中の処理を行う
+                const response = await fetch("/api/videoes", {
+                    method: "POST",
+                    body: formData,
+                });
+
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else {
+                    console.error("アップロードに失敗しました");
+                }
+            } catch (error) {
+                console.error("アップロードに失敗しました", error);
+            }
         })
     </script>
 </body>
