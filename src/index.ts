@@ -3,12 +3,18 @@ import path from "path";
 import multer from "multer";
 import fs from "fs";
 import ffmpeg from "fluent-ffmpeg";
+import "dotenv/config";
+import Groq from "groq-sdk";
 
 const app = express();
 const PORT = 3000;
 const UPLOAD_DIR = path.join(__dirname, "public/uploads");
 const AUDIO_DIR = path.join(__dirname, "public/audio");
 const SPLIT_AUDIO_DIR = path.join(__dirname, "public/audio_split");
+const TRANSCRIPTION_DIR = path.join(__dirname, "public/transcription");
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -100,13 +106,42 @@ const splitAudio = async (input_file: string, size = 20) => {
   }
 
   //分割した音声データを保存
-  await Promise.all(
-    parts.map((part, index) =>
-      part.save(`${SPLIT_AUDIO_DIR}/${index}-${pathname}`)
-    )
-  );
+  const saveFilePromise = parts.map((part, index) => {
+    return new Promise((resolve, reject) => {
+      part
+        .on("end", () => resolve(true))
+        .on("error", (err) => reject(err))
+        .save(`${SPLIT_AUDIO_DIR}/${index}-${pathname}`);
+    });
+  });
+
+  await Promise.all(saveFilePromise);
 
   return;
+};
+
+const convertToText = async (audioFile: string) => {
+  const files = fs.readdirSync(SPLIT_AUDIO_DIR);
+  fs.rmSync(TRANSCRIPTION_DIR, { recursive: true, force: true });
+  fs.mkdirSync(TRANSCRIPTION_DIR, { recursive: true });
+
+  const transcriptionFile = path.join(
+    TRANSCRIPTION_DIR,
+    path.basename(audioFile).replace(".mp3", ".txt")
+  );
+
+  for (const file of files) {
+    const audioFile = path.join(SPLIT_AUDIO_DIR, file);
+    const transcription: any = await groq.audio.transcriptions.create({
+      file: fs.createReadStream(audioFile),
+      model: "whisper-large-v3",
+      language: "ja",
+      response_format: "verbose_json",
+    });
+    for (const segment of transcription.segments) {
+      fs.appendFileSync(transcriptionFile, segment.text + "\n");
+    }
+  }
 };
 
 app.get("/", (req, res) => {
@@ -136,6 +171,7 @@ app.post("/api/videoes", upload.single("file"), async (req, res) => {
     );
 
     await splitAudio(audioFile);
+    await convertToText(audioFile);
 
     res.redirect(301, "/complete");
   } catch (error) {
