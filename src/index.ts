@@ -1,19 +1,36 @@
-import express from "express";
-import path from "path";
-import multer from "multer";
 import fs from "fs";
-import ffmpeg from "fluent-ffmpeg";
-import "dotenv/config";
-import Groq from "groq-sdk";
+import path from "path";
 
-const app = express();
-const PORT = 3000;
+import axios from "axios";
+import express from "express";
+import ffmpeg from "fluent-ffmpeg";
+import FormData from "form-data";
+import multer from "multer";
+import { VertexAI } from "@google-cloud/vertexai";
+import "dotenv/config";
+
 const UPLOAD_DIR = path.join(__dirname, "public/uploads");
 const AUDIO_DIR = path.join(__dirname, "public/audio");
-const SPLIT_AUDIO_DIR = path.join(__dirname, "public/audio_split");
 const TRANSCRIPTION_DIR = path.join(__dirname, "public/transcription");
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
+const GIJIROKU_DIR = path.join(__dirname, "public/gijiroku");
+const PROMPT_DIR = path.join(__dirname, "public/prompt");
+const MAIL_DIR = path.join(__dirname, "public/mail");
+const PORT = 3000;
+
+const app = express();
+const serviceKey = process.env.AZURE_API_KEY as string;
+const serviceRegion = process.env.AZURE_REGION as string;
+
+const vertexai = new VertexAI({
+  project: process.env.GOOGLE_PROJECT_ID,
+});
+
+const generativeModel = vertexai.getGenerativeModel({
+  model: "gemini-1.5-pro",
+  systemInstruction: {
+    role: "system",
+    parts: [{ text: `あなたは最適な商談の議事録を作成できる人です。` }],
+  },
 });
 
 app.use(express.json());
@@ -46,7 +63,10 @@ const upload = multer({
 const convertVideoToAudio = async (input_file: string, output_file: string) => {
   return new Promise((resolve, reject) => {
     ffmpeg(input_file)
-      .toFormat("mp3")
+      .audioFrequency(16000)
+      .audioChannels(1)
+      .audioCodec("pcm_s16le")
+      .toFormat("wav")
       .on("end", () => {
         resolve(true);
       })
@@ -57,90 +77,108 @@ const convertVideoToAudio = async (input_file: string, output_file: string) => {
   });
 };
 
-//20MB以上の音声ファイルを分割
-const splitAudio = async (input_file: string, size = 20) => {
-  const fileSize = fs.statSync(input_file).size;
-  //いくつの音声ファイルに分割するか決定
-  const numParts = Math.ceil(fileSize / (size * 1024 * 1024));
-
-  const pathname = path.basename(input_file);
-  fs.rmSync(SPLIT_AUDIO_DIR, { recursive: true, force: true });
-  fs.mkdirSync(SPLIT_AUDIO_DIR, { recursive: true });
-
-  if (numParts === 1) {
-    await new Promise((resolve, reject) => {
-      ffmpeg(input_file)
-        .on("end", () => resolve(true))
-        .on("error", (err) => reject(err))
-        .save(`${SPLIT_AUDIO_DIR}/${pathname}`);
-    });
-    return;
-  }
-
-  //音声データの全長を秒単位で取得
-  const duration: number = await new Promise((resolve, reject) => {
-    ffmpeg(input_file).ffprobe((err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        const duration = data.format.duration;
-        if (duration) {
-          resolve(duration);
-        }
-        reject(new Error("Duration is undefined"));
-      }
-    });
-  });
-
-  //音声データを分割
-  const partDuration = Math.ceil(duration / numParts);
-  const parts = [];
-  for (let i = 0; i < numParts; i++) {
-    const start = i * partDuration;
-    const end = Math.min(start + partDuration, duration);
-    const part = ffmpeg(input_file)
-      .seekInput(start)
-      .duration(end - start)
-      .toFormat("mp3");
-    parts.push(part);
-  }
-
-  //分割した音声データを保存
-  const saveFilePromise = parts.map((part, index) => {
-    return new Promise((resolve, reject) => {
-      part
-        .on("end", () => resolve(true))
-        .on("error", (err) => reject(err))
-        .save(`${SPLIT_AUDIO_DIR}/${index}-${pathname}`);
-    });
-  });
-
-  await Promise.all(saveFilePromise);
-
-  return;
-};
-
-const convertToText = async (audioFile: string) => {
-  const files = fs.readdirSync(SPLIT_AUDIO_DIR);
+const convertToText = async (originAudioFile: string) => {
+  const files = fs.readdirSync(AUDIO_DIR);
   fs.rmSync(TRANSCRIPTION_DIR, { recursive: true, force: true });
   fs.mkdirSync(TRANSCRIPTION_DIR, { recursive: true });
+  const audioFile = path.join(AUDIO_DIR, files[0]);
 
   const transcriptionFile = path.join(
     TRANSCRIPTION_DIR,
-    path.basename(audioFile).replace(".mp3", ".txt")
+    path.basename(originAudioFile).replace(".wav", ".txt")
   );
 
-  for (const file of files) {
-    const audioFile = path.join(SPLIT_AUDIO_DIR, file);
-    const transcription: any = await groq.audio.transcriptions.create({
-      file: fs.createReadStream(audioFile),
-      model: "whisper-large-v3",
-      language: "ja",
-      response_format: "verbose_json",
-    });
-    for (const segment of transcription.segments) {
-      fs.appendFileSync(transcriptionFile, segment.text + "\n");
+  const apiUrl = `https://${serviceRegion}.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15`;
+  const formData = new FormData();
+  const audioData = fs.readFileSync(audioFile);
+  formData.append("audio", audioData, {
+    filename: path.basename(audioFile),
+  });
+  formData.append(
+    "definition",
+    JSON.stringify({
+      locales: ["ja-JP"],
+    }),
+    {
+      filename: "definition.json",
     }
+  );
+
+  try {
+    const response = await axios.post(apiUrl, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+        "Ocp-Apim-Subscription-Key": serviceKey,
+      },
+      maxBodyLength: Infinity,
+    });
+
+    for await (const item of response.data.phrases) {
+      fs.appendFileSync(transcriptionFile, item.text + "\n", "utf8");
+    }
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+};
+
+const convertTranscriptionToGijiroku = async (originAudioFile: string) => {
+  const file = fs.readdirSync(TRANSCRIPTION_DIR);
+  fs.rmSync(GIJIROKU_DIR, { recursive: true, force: true });
+  fs.mkdirSync(GIJIROKU_DIR, { recursive: true });
+
+  const gijirokuFile = path.join(
+    GIJIROKU_DIR,
+    path.basename(originAudioFile).replace(".wav", ".txt")
+  );
+
+  const promptFile = fs.readFileSync(
+    `${PROMPT_DIR}/gijiroku_prompt.txt`,
+    "utf8"
+  );
+  const transcriptionFile = path.join(TRANSCRIPTION_DIR, file[0]);
+  const transcription = fs.readFileSync(transcriptionFile, "utf8");
+
+  const request = {
+    contents: [
+      { role: "user", parts: [{ text: promptFile }] },
+      { role: "user", parts: [{ text: transcription }] },
+    ],
+  };
+  const result = await generativeModel.generateContent(request);
+  const response = result.response;
+  if (response.candidates) {
+    const gijiroku = response.candidates[0].content.parts[0].text;
+    if (!gijiroku) {
+      throw new Error("議事録の作成に失敗しました");
+    }
+    fs.writeFileSync(gijirokuFile, gijiroku);
+  }
+};
+
+const createMail = async (audioFile: string) => {
+  const file = fs.readdirSync(GIJIROKU_DIR);
+  fs.rmSync(MAIL_DIR, { recursive: true, force: true });
+  fs.mkdirSync(MAIL_DIR, { recursive: true });
+
+  const mailFile = path.join(MAIL_DIR, file[0]);
+  const promptFile = fs.readFileSync(`${PROMPT_DIR}/mail_prompt.txt`, "utf8");
+  const gijirokuFile = path.join(GIJIROKU_DIR, file[0]);
+  const gijiroku = fs.readFileSync(gijirokuFile, "utf8");
+
+  const request = {
+    contents: [
+      { role: "user", parts: [{ text: promptFile }] },
+      { role: "user", parts: [{ text: gijiroku }] },
+    ],
+  };
+  const result = await generativeModel.generateContent(request);
+  const response = result.response;
+  if (response.candidates) {
+    const mail = response.candidates[0].content.parts[0].text;
+    if (!mail) {
+      throw new Error("メールの作成に失敗しました");
+    }
+    fs.writeFileSync(mailFile, mail);
   }
 };
 
@@ -163,19 +201,24 @@ app.post("/api/videoes", upload.single("file"), async (req, res) => {
     fs.mkdirSync(AUDIO_DIR, { recursive: true });
     const audioFile = path.join(
       AUDIO_DIR,
-      req.file.filename.replace(/\.[mM][pP]4$/, ".mp3")
+      req.file.filename.replace(/\.[mM][pP]4$/, ".wav")
     );
+
     await convertVideoToAudio(
       path.join(UPLOAD_DIR, req.file.filename),
       audioFile
     );
-
-    await splitAudio(audioFile);
     await convertToText(audioFile);
+    await convertTranscriptionToGijiroku(audioFile);
+    await createMail(audioFile);
 
     res.redirect(301, "/complete");
-  } catch (error) {
-    res.status(500).send(error);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).send(error.message);
+    } else {
+      res.status(500).send("予期せぬエラー");
+    }
   }
 });
 
