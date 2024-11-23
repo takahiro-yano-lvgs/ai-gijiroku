@@ -14,6 +14,12 @@
         <h1>動画をアップロード</h1>
         <form>
           <input type="file" id="file_name" name="file" accept="video/mp4" />
+          <input
+            type="text"
+            id="user_id"
+            name="user_id"
+            placeholder="ユーザーID"
+          />
           <button type="submit">アップロード</button>
         </form>
       </section>
@@ -26,9 +32,10 @@
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const fileInput = document.getElementById("file_name");
+        const userId = document.getElementById("user_id").value;
         const file = fileInput.files[0];
-        if (!file) {
-          alert("ファイルが選択されていません");
+        if (!file || !userId) {
+          alert("ファイルまたはユーザーIDが入力されていません。");
           return;
         }
 
@@ -38,6 +45,7 @@
         });
         const formData = new FormData();
         formData.append("file", renamedFile);
+        formData.append("userId", userId);
 
         try {
           loadingContent.style.display = "block";
@@ -46,7 +54,7 @@
             method: "POST",
             body: formData,
           });
-          
+
           if (!response.ok) {
             const errorText = await response.text();
             throw new Error(errorText);

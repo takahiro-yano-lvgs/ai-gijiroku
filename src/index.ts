@@ -29,7 +29,11 @@ const generativeModel = vertexai.getGenerativeModel({
   model: "gemini-1.5-pro",
   systemInstruction: {
     role: "system",
-    parts: [{ text: `あなたは最適な商談の議事録を作成できる人です。` }],
+    parts: [
+      {
+        text: `あなたは最適な商談の議事録やお礼メールを作成できる人です。メッセージに対して、分かりやすく構造化された形で応答してください。`,
+      },
+    ],
   },
 });
 
@@ -121,6 +125,16 @@ const convertToText = async (originAudioFile: string) => {
   }
 };
 
+const markdownToMrkdwn = (markdownText: string) => {
+  let mrkdwnText = markdownText.replace(/#+\s/g, "");
+
+  mrkdwnText = mrkdwnText.replace(/\n\*\s(.*?)/g, "\n- $1");
+  
+  mrkdwnText = mrkdwnText.replace(/\*\*(.*?)\*\*/g, "*$1*");
+
+  return mrkdwnText;
+};
+
 const convertTranscriptionToGijiroku = async (originAudioFile: string) => {
   const file = fs.readdirSync(TRANSCRIPTION_DIR);
   fs.rmSync(GIJIROKU_DIR, { recursive: true, force: true });
@@ -151,7 +165,8 @@ const convertTranscriptionToGijiroku = async (originAudioFile: string) => {
     if (!gijiroku) {
       throw new Error("議事録の作成に失敗しました");
     }
-    fs.writeFileSync(gijirokuFile, gijiroku);
+    const formattedGijiroku = markdownToMrkdwn(gijiroku);
+    fs.writeFileSync(gijirokuFile, formattedGijiroku);
   }
 };
 
@@ -178,8 +193,65 @@ const createMail = async (audioFile: string) => {
     if (!mail) {
       throw new Error("メールの作成に失敗しました");
     }
-    fs.writeFileSync(mailFile, mail);
+    const formattedMail = markdownToMrkdwn(mail);
+    fs.writeFileSync(mailFile, formattedMail);
   }
+};
+
+const postGijirokuAndMailToSlack = async (audioFile: string, userId: string) => {
+  const gijiroku = fs.readFileSync(
+    path.join(GIJIROKU_DIR, path.basename(audioFile).replace(".wav", ".txt")),
+    "utf8"
+  );
+  const mail = fs.readFileSync(
+    path.join(MAIL_DIR, path.basename(audioFile).replace(".wav", ".txt")),
+    "utf8"
+  );
+
+  const response = await axios.post(
+    "https://slack.com/api/conversations.open",
+    {
+      token: process.env.SLACK_BOT_TOKEN,
+      users: userId,
+    },
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+      },
+    }
+  );
+  const channelId = response.data.channel.id;
+
+  await axios.post(
+    "https://slack.com/api/chat.postMessage",
+    {
+      token: process.env.SLACK_BOT_TOKEN,
+      channel: channelId,
+      text: gijiroku,
+    },
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+      },
+    }
+  );
+
+  await axios.post(
+    "https://slack.com/api/chat.postMessage",
+    {
+      token: process.env.SLACK_BOT_TOKEN,
+      channel: channelId,
+      text: mail,
+    },
+    {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+      },
+    }
+  );
 };
 
 app.get("/", (req, res) => {
@@ -197,6 +269,12 @@ app.post("/api/videoes", upload.single("file"), async (req, res) => {
       return;
     }
 
+    const userId = req.body.userId;
+    if (!userId) {
+      res.status(400).send("No user ID provided");
+      return;
+    }
+
     fs.rmSync(AUDIO_DIR, { recursive: true, force: true });
     fs.mkdirSync(AUDIO_DIR, { recursive: true });
     const audioFile = path.join(
@@ -211,6 +289,7 @@ app.post("/api/videoes", upload.single("file"), async (req, res) => {
     await convertToText(audioFile);
     await convertTranscriptionToGijiroku(audioFile);
     await createMail(audioFile);
+    await postGijirokuAndMailToSlack(audioFile, userId);
 
     res.redirect(301, "/complete");
   } catch (error: unknown) {
