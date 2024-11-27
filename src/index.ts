@@ -81,6 +81,46 @@ const convertVideoToAudio = async () => {
   });
 };
 
+const postSlack = async (userId: string, content: string) => {
+  try {
+    const response = await axios.post(
+      "https://slack.com/api/conversations.open",
+      {
+        token: process.env.SLACK_BOT_TOKEN,
+        users: userId,
+      },
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+        },
+      }
+    );
+    const channelId = response.data.channel.id;
+
+    await axios.post(
+      "https://slack.com/api/chat.postMessage",
+      {
+        token: process.env.SLACK_BOT_TOKEN,
+        channel: channelId,
+        text: content,
+      },
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+        },
+      }
+    );
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.log(error.message);
+    } else {
+      console.log("予期せぬエラーが発生しました");
+    }
+  }
+};
+
 const convertToText = async () => {
   const audioFiles = fs.readdirSync(AUDIO_DIR);
   const audioFilePath = path.join(AUDIO_DIR, audioFiles[0]);
@@ -237,58 +277,8 @@ const postGijirokuAndMailToSlack = async (userId: string) => {
   const mailFilePath = path.join(MAIL_DIR, mailFiles[0]);
   const mail = fs.readFileSync(mailFilePath, "utf8");
 
-  try {
-    const response = await axios.post(
-      "https://slack.com/api/conversations.open",
-      {
-        token: process.env.SLACK_BOT_TOKEN,
-        users: userId,
-      },
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
-        },
-      }
-    );
-    const channelId = response.data.channel.id;
-
-    await axios.post(
-      "https://slack.com/api/chat.postMessage",
-      {
-        token: process.env.SLACK_BOT_TOKEN,
-        channel: channelId,
-        text: gijiroku,
-      },
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
-        },
-      }
-    );
-
-    await axios.post(
-      "https://slack.com/api/chat.postMessage",
-      {
-        token: process.env.SLACK_BOT_TOKEN,
-        channel: channelId,
-        text: mail,
-      },
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
-        },
-      }
-    );
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      console.log(error.message);
-    } else {
-      console.log("予期せぬエラーが発生しました");
-    }
-  }
+  postSlack(userId, gijiroku);
+  postSlack(userId, mail);
 };
 
 app.get("/", (req, res) => {
@@ -305,23 +295,34 @@ app.post("/api/videoes", upload.single("file"), async (req, res) => {
       throw new Error("ファイルがアップロードされていません");
     }
 
-    const userId = req.body.userId;
-    if (!userId) {
-      throw new Error("ユーザーIDが入力されていません");
-    }
-
     await convertVideoToAudio();
-    await convertToText();
-    await convertTranscriptionToGijiroku();
-    await createMail();
-    await postGijirokuAndMailToSlack(userId);
-
     res.redirect(301, "/complete");
   } catch (error: unknown) {
     if (error instanceof Error) {
       res.status(500).send(error.message);
     } else {
       res.status(500).send("予期せぬエラー");
+    }
+  }
+
+  const userId = req.body.userId;
+  try {
+    if (!userId) {
+      throw new Error("ユーザーIDが入力されていません");
+    }
+
+    await convertToText();
+    await convertTranscriptionToGijiroku();
+    await createMail();
+    await postGijirokuAndMailToSlack(userId);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      postSlack(userId, `${error.message}\n再度アップロードしてください`);
+    } else {
+      postSlack(
+        userId,
+        `予期せぬエラーが発生しました\n再度アップロードしてください`
+      );
     }
   }
 });
