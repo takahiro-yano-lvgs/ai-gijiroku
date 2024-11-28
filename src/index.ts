@@ -17,7 +17,11 @@ const GIJIROKU_PROMPT_DIR = path.join(__dirname, "public/gijiroku_prompt");
 const MAIL_PROMPT_DIR = path.join(__dirname, "public/mail_prompt");
 const MAIL_DIR = path.join(__dirname, "public/mail");
 const AUDIO_FORMATS = "wav";
+const SLACK_ID_LENGTH = 11;
+const SLACK_API_URL = "https://slack.com/api/";
 const PORT = 3000;
+
+type generateContentType = "gijiroku" | "mail";
 
 const app = express();
 
@@ -84,7 +88,7 @@ const convertVideoToAudio = async () => {
 const postSlack = async (userId: string, content: string) => {
   try {
     const response = await axios.post(
-      "https://slack.com/api/conversations.open",
+      `${SLACK_API_URL}conversations.open`,
       {
         token: process.env.SLACK_BOT_TOKEN,
         users: userId,
@@ -99,7 +103,7 @@ const postSlack = async (userId: string, content: string) => {
     const channelId = response.data.channel.id;
 
     await axios.post(
-      "https://slack.com/api/chat.postMessage",
+      `${SLACK_API_URL}chat.postMessage`,
       {
         token: process.env.SLACK_BOT_TOKEN,
         channel: channelId,
@@ -131,8 +135,7 @@ const convertToText = async () => {
     audioFiles[0].replace(`.${AUDIO_FORMATS}`, ".txt")
   );
 
-  const serviceRegion = process.env.AZURE_REGION;
-  const apiUrl = `https://${serviceRegion}.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15`;
+  const apiUrl = process.env.AZURE_API_URL as string;
 
   const formData = new FormData();
   const audioData = fs.readFileSync(audioFilePath);
@@ -146,24 +149,16 @@ const convertToText = async () => {
     })
   );
 
-  try {
-    const serviceKey = process.env.AZURE_API_KEY;
-    const response = await axios.post(apiUrl, formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-        "Ocp-Apim-Subscription-Key": serviceKey,
-      },
-    });
+  const serviceKey = process.env.AZURE_API_KEY;
+  const response = await axios.post(apiUrl, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      "Ocp-Apim-Subscription-Key": serviceKey,
+    },
+  });
 
-    for (const phrase of response.data.phrases) {
-      fs.appendFileSync(transcriptionFilePath, phrase.text + "\n");
-    }
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      throw new Error(error.message);
-    } else {
-      throw new Error("予期せぬエラー");
-    }
+  for (const phrase of response.data.phrases) {
+    fs.appendFileSync(transcriptionFilePath, phrase.text + "\n");
   }
 };
 
@@ -197,74 +192,44 @@ const markdownToMrkdwn = (markdownText: string) => {
   return mrkdwnText;
 };
 
-const convertTranscriptionToGijiroku = async () => {
+const generateContent = async (type: generateContentType) => {
+  const inputDir = type === "gijiroku" ? TRANSCRIPTION_DIR : GIJIROKU_DIR;
+  const promptDir = type === "gijiroku" ? GIJIROKU_PROMPT_DIR : MAIL_PROMPT_DIR;
+  const outputDir = type === "gijiroku" ? GIJIROKU_DIR : MAIL_DIR;
+
   const generativeModel = setupVertexAi();
 
-  const transcriptionFiles = fs.readdirSync(TRANSCRIPTION_DIR);
-  const transcriptionFilePath = path.join(
-    TRANSCRIPTION_DIR,
-    transcriptionFiles[0]
+  const inputFiles = fs.readdirSync(inputDir);
+  const inputFilePath = path.join(
+    inputDir,
+    inputFiles[0]
   );
-  const transcription = fs.readFileSync(transcriptionFilePath, "utf8");
+  const inputContent = fs.readFileSync(inputFilePath, "utf8");
 
-  const promptFiles = fs.readdirSync(GIJIROKU_PROMPT_DIR);
-  const promptFilePath = path.join(GIJIROKU_PROMPT_DIR, promptFiles[0]);
+  const promptFiles = fs.readdirSync(promptDir);
+  const promptFilePath = path.join(promptDir, promptFiles[0]);
   const prompt = fs.readFileSync(promptFilePath, "utf8");
 
-  clearDir(GIJIROKU_DIR);
-  const gijirokuFilePath = path.join(GIJIROKU_DIR, transcriptionFiles[0]);
+  clearDir(outputDir);
+  const outputFilePath = path.join(outputDir, inputFiles[0]);
 
   const request = {
     contents: [
       { role: "user", parts: [{ text: prompt }] },
-      { role: "user", parts: [{ text: transcription }] },
+      { role: "user", parts: [{ text: inputContent }] },
     ],
   };
   const result = await generativeModel.generateContent(request);
   const response = result.response;
   if (response.candidates) {
-    const gijiroku = response.candidates[0].content.parts[0].text;
-    if (!gijiroku) {
-      throw new Error("議事録の作成に失敗しました");
+    const content = response.candidates[0].content.parts[0].text;
+    if (!content) {
+      throw new Error("コンテンツ生成に失敗しました");
     }
-    const formattedGijiroku = markdownToMrkdwn(gijiroku);
-    fs.writeFileSync(gijirokuFilePath, formattedGijiroku);
+    const formattedContent = markdownToMrkdwn(content);
+    fs.writeFileSync(outputFilePath, formattedContent);
   } else {
-    throw new Error("議事録の作成に失敗しました");
-  }
-};
-
-const createMail = async () => {
-  const generativeModel = setupVertexAi();
-
-  const gijirokuFiles = fs.readdirSync(GIJIROKU_DIR);
-  const gijirokuFile = path.join(GIJIROKU_DIR, gijirokuFiles[0]);
-  const gijiroku = fs.readFileSync(gijirokuFile, "utf8");
-
-  const promptFiles = fs.readdirSync(MAIL_PROMPT_DIR);
-  const promptFilePath = path.join(MAIL_PROMPT_DIR, promptFiles[0]);
-  const prompt = fs.readFileSync(promptFilePath, "utf8");
-
-  clearDir(MAIL_DIR);
-  const mailFile = path.join(MAIL_DIR, gijirokuFiles[0]);
-
-  const request = {
-    contents: [
-      { role: "user", parts: [{ text: prompt }] },
-      { role: "user", parts: [{ text: gijiroku }] },
-    ],
-  };
-  const result = await generativeModel.generateContent(request);
-  const response = result.response;
-  if (response.candidates) {
-    const mail = response.candidates[0].content.parts[0].text;
-    if (!mail) {
-      throw new Error("メールの作成に失敗しました");
-    }
-    const formattedMail = markdownToMrkdwn(mail);
-    fs.writeFileSync(mailFile, formattedMail);
-  } else {
-    throw new Error("メールの作成に失敗しました");
+    throw new Error("コンテンツ生成に失敗しました");
   }
 };
 
@@ -290,30 +255,17 @@ app.get("/complete", (req, res) => {
 });
 
 app.post("/api/videoes", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) {
-      throw new Error("ファイルがアップロードされていません");
-    }
-
-    await convertVideoToAudio();
-    res.redirect(301, "/complete");
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).send(error.message);
-    } else {
-      res.status(500).send("予期せぬエラー");
-    }
-  }
-
   const userId = req.body.userId;
   try {
-    if (!userId) {
-      throw new Error("ユーザーIDが入力されていません");
+    if (!userId || userId.length !== SLACK_ID_LENGTH) {
+      res.status(400).send("ユーザーIDの入力値が不正です");
     }
+    res.redirect(301, "/complete");
 
+    await convertVideoToAudio();
     await convertToText();
-    await convertTranscriptionToGijiroku();
-    await createMail();
+    await generateContent("gijiroku");
+    await generateContent("mail");
     await postGijirokuAndMailToSlack(userId);
   } catch (error: unknown) {
     if (error instanceof Error) {
