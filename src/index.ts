@@ -165,6 +165,16 @@ const convertToText = async () => {
 const setupVertexAi = () => {
   const vertexai = new VertexAI({
     project: process.env.GOOGLE_PROJECT_ID,
+    googleAuthOptions: {
+      credentials: {
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        quota_project_id: process.env.GOOGLE_PROJECT_ID,
+        refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+        type: "authorized_user",
+        universe_domain: "googleapis.com",
+      }
+    }
   });
 
   const generativeModel = vertexai.getGenerativeModel({
@@ -200,10 +210,7 @@ const generateContent = async (type: generateContentType) => {
   const generativeModel = setupVertexAi();
 
   const inputFiles = fs.readdirSync(inputDir);
-  const inputFilePath = path.join(
-    inputDir,
-    inputFiles[0]
-  );
+  const inputFilePath = path.join(inputDir, inputFiles[0]);
   const inputContent = fs.readFileSync(inputFilePath, "utf8");
 
   const promptFiles = fs.readdirSync(promptDir);
@@ -246,6 +253,7 @@ const postGijirokuAndMailToSlack = async (userId: string) => {
   postSlack(userId, mail);
 };
 
+// 静的サイトはs3にホスティング
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
 });
@@ -254,7 +262,8 @@ app.get("/complete", (req, res) => {
   res.sendFile(path.join(__dirname, "public/complete.html"));
 });
 
-app.post("/api/videoes", upload.single("file"), async (req, res) => {
+// s3に動画がアップロードされたら実行されるlambda関数
+app.post("/api/videos", upload.single("file"), async (req, res) => {
   const userId = req.body.userId;
   try {
     if (!userId || userId.length !== SLACK_ID_LENGTH) {
