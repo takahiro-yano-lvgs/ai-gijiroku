@@ -43,30 +43,33 @@
         const renamedFile = new File([file], encodedFileName, {
           type: file.type,
         });
-        const formData = new FormData();
-        formData.append("file", renamedFile);
-        formData.append("userId", userId);
 
         try {
           loadingContent.style.display = "block";
           mainContent.style.display = "none";
-          const response = await fetch("/api/videoes", {
-            method: "POST",
-            body: formData,
-          });
+          const s3PresignedUrlResponse = await fetch(
+            "https://75331cuiw3.execute-api.ap-northeast-1.amazonaws.com/dev/presigned-url",
+            {
+              method: "POST",
+              body: JSON.stringify({ userId, filename: file.name }),
+            }
+          );
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(errorText);
+          if (!s3PresignedUrlResponse.ok) {
+            throw new Error("アップロード先のURLの取得に失敗しました");
           }
 
-          if (response.redirected) {
-            window.location.href = response.url;
+          const s3PresignedUrl = await s3PresignedUrlResponse.text();
+          const uploadResult = await fetch(s3PresignedUrl, {
+            method: "PUT",
+            body: renamedFile,
+          });
+
+          if (!uploadResult.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText);
           } else {
-            alert(
-              "アップロードに失敗しました。再度アップロードを試してください。"
-            );
-            window.location.href = "/";
+            window.location.href = "/complete";
             return;
           }
         } catch (error) {
