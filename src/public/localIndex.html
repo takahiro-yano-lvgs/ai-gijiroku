@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ai-gijiroku</title>
+  </head>
+  <body>
+    <main>
+      <section class="loading-content" style="display: none">
+        <h1>アップロード中・・・</h1>
+      </section>
+      <section class="main-content">
+        <h1>動画をアップロード</h1>
+        <form>
+          <input type="file" id="file_name" name="file" accept="video/mp4" />
+          <input
+            type="text"
+            id="user_id"
+            name="user_id"
+            placeholder="ユーザーID"
+          />
+          <button type="submit">アップロード</button>
+        </form>
+      </section>
+    </main>
+
+    <script>
+        const loadingContent = document.querySelector(".loading-content");
+        const mainContent = document.querySelector(".main-content");
+        const form = mainContent.querySelector("form");
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const fileInput = document.getElementById("file_name");
+          const userId = document.getElementById("user_id").value;
+          const file = fileInput.files[0];
+          if (!file || !userId) {
+            alert("ファイルまたはユーザーIDが入力されていません。");
+            return;
+          }
+  
+          const encodedFileName = encodeURIComponent(file.name);
+          const renamedFile = new File([file], encodedFileName, {
+            type: file.type,
+          });
+          const formData = new FormData();
+          formData.append("file", renamedFile);
+          formData.append("userId", userId);
+  
+          try {
+            loadingContent.style.display = "block";
+            mainContent.style.display = "none";
+            const response = await fetch("/api/videos", {
+              method: "POST",
+              body: formData,
+            });
+  
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(errorText);
+            }
+  
+            if (response.redirected) {
+              window.location.href = response.url;
+            } else {
+              alert(
+                "アップロードに失敗しました。再度アップロードを試してください。"
+              );
+              window.location.href = "/";
+              return;
+            }
+          } catch (error) {
+            alert(`アップロードに失敗しました。${error.message}`);
+            window.location.href = "/";
+            return;
+          }
+        });
+      </script>
+  </body>
+</html>

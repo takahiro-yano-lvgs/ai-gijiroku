@@ -255,7 +255,10 @@ const postGijirokuAndMailToSlack = async (userId: string) => {
 
 // 静的サイトはs3にホスティング
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/index.html"));
+  // ローカル環境でテストする場合
+  res.sendFile(path.join(__dirname, "public/localIndex.html"));
+  // 本番環境のエンドポイントを使用する場合
+  // res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
 app.get("/complete", (req, res) => {
