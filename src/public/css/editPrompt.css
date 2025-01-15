@@ -1,0 +1,134 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+li {
+  list-style: none;
+}
+
+input {
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+body {
+  margin: 16px;
+}
+
+.form {
+  display: none;
+}
+
+.input-block {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.title {
+  padding: 8px 10px;
+}
+
+.input-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  margin-bottom: 10px;
+}
+
+textarea {
+  outline: none;
+  padding: 8px;
+  height: 200px;
+}
+
+.back-link {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  background-color: #0078d7;
+  color: #fff;
+  font-size: 16px;
+  margin-top: 20px;
+}
+
+.save-button:hover,
+.back-link:hover {
+  background-color: #0056b3;
+}
+
+.prompt-list {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+  gap: 10px;
+}
+
+.select-button[data-active="true"] {
+  background-color: #d3ebff;
+}
+
+.prompt-list > li > button:hover {
+  background-color: #d3ebff;
+}
+
+.prompt-list > li > button {
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+.select-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.delete-button {
+  font-size: large;
+  width: 20px;
+  height: 20px;
+}
+
+.delete-button:hover {
+  background-color: #ccc;
+  border-radius: 100%;
+}
+
+.save-button {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  background-color: #0078d7;
+  color: #fff;
+  font-size: 16px;
+  margin-top: 20px;
+}
+
+.back-link {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  background-color: #0078d7;
+  color: #fff;
+  font-size: 16px;
+  margin-top: 20px;
+}

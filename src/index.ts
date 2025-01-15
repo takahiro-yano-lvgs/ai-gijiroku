@@ -13,21 +13,17 @@ const UPLOAD_DIR = path.join(__dirname, "public/uploads");
 const AUDIO_DIR = path.join(__dirname, "public/audio");
 const TRANSCRIPTION_DIR = path.join(__dirname, "public/transcription");
 const GIJIROKU_DIR = path.join(__dirname, "public/gijiroku");
-const GIJIROKU_PROMPT_DIR = path.join(__dirname, "public/gijiroku_prompt");
-const MAIL_PROMPT_DIR = path.join(__dirname, "public/mail_prompt");
 const MAIL_DIR = path.join(__dirname, "public/mail");
 const AUDIO_FORMATS = "wav";
 const SLACK_ID_LENGTH = 11;
 const SLACK_API_URL = "https://slack.com/api/";
 const PORT = 3000;
 
-type generateContentType = "gijiroku" | "mail";
-
 const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static("public"));
+app.use("/css", express.static(__dirname + "/public/css"));
 
 const clearDir = (dir: string) => {
   try {
@@ -173,8 +169,8 @@ const setupVertexAi = () => {
         refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
         type: "authorized_user",
         universe_domain: "googleapis.com",
-      }
-    }
+      },
+    },
   });
 
   const generativeModel = vertexai.getGenerativeModel({
@@ -202,20 +198,12 @@ const markdownToMrkdwn = (markdownText: string) => {
   return mrkdwnText;
 };
 
-const generateContent = async (type: generateContentType) => {
-  const inputDir = type === "gijiroku" ? TRANSCRIPTION_DIR : GIJIROKU_DIR;
-  const promptDir = type === "gijiroku" ? GIJIROKU_PROMPT_DIR : MAIL_PROMPT_DIR;
-  const outputDir = type === "gijiroku" ? GIJIROKU_DIR : MAIL_DIR;
-
+const generateContent = async (inputDir: string, outputDir: string, prompt: string) => {
   const generativeModel = setupVertexAi();
 
   const inputFiles = fs.readdirSync(inputDir);
   const inputFilePath = path.join(inputDir, inputFiles[0]);
   const inputContent = fs.readFileSync(inputFilePath, "utf8");
-
-  const promptFiles = fs.readdirSync(promptDir);
-  const promptFilePath = path.join(promptDir, promptFiles[0]);
-  const prompt = fs.readFileSync(promptFilePath, "utf8");
 
   clearDir(outputDir);
   const outputFilePath = path.join(outputDir, inputFiles[0]);
@@ -249,8 +237,13 @@ const postGijirokuAndMailToSlack = async (userId: string) => {
   const mailFilePath = path.join(MAIL_DIR, mailFiles[0]);
   const mail = fs.readFileSync(mailFilePath, "utf8");
 
+  // const transcriptionFile = fs.readdirSync(TRANSCRIPTION_DIR);
+  // const transcriptionFilePath = path.join(TRANSCRIPTION_DIR, transcriptionFile[0]);
+  // const transcription = fs.readFileSync(transcriptionFilePath, "utf8");
+
   postSlack(userId, gijiroku);
   postSlack(userId, mail);
+  // postSlack(userId, transcription);
 };
 
 // 静的サイトはs3にホスティング
@@ -261,13 +254,22 @@ app.get("/", (req, res) => {
   // res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
+app.get("/create-prompt", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/createPrompt.html"));
+});
+
+app.get("/edit-prompt", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/editPrompt.html"));
+});
+
 app.get("/complete", (req, res) => {
   res.sendFile(path.join(__dirname, "public/complete.html"));
 });
 
 // s3に動画がアップロードされたら実行されるlambda関数
 app.post("/api/videos", upload.single("file"), async (req, res) => {
-  const userId = req.body.userId;
+  const { userId, gijirokuPrompt, mailPrompt } = req.body;
+
   try {
     if (!userId || userId.length !== SLACK_ID_LENGTH) {
       res.status(400).send("ユーザーIDの入力値が不正です");
@@ -276,8 +278,8 @@ app.post("/api/videos", upload.single("file"), async (req, res) => {
 
     await convertVideoToAudio();
     await convertToText();
-    await generateContent("gijiroku");
-    await generateContent("mail");
+    await generateContent(TRANSCRIPTION_DIR, GIJIROKU_DIR, gijirokuPrompt);
+    await generateContent(GIJIROKU_DIR, MAIL_DIR, mailPrompt);
     await postGijirokuAndMailToSlack(userId);
   } catch (error: unknown) {
     if (error instanceof Error) {

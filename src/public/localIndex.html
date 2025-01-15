@@ -3,29 +3,97 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/css/localIndex.css" />
     <title>ai-gijiroku</title>
   </head>
   <body>
     <main>
-      <section class="loading-content" style="display: none">
+      <section class="loading-content">
         <h1>アップロード中・・・</h1>
       </section>
       <section class="main-content">
         <h1>動画をアップロード</h1>
-        <form>
-          <input type="file" id="file_name" name="file" accept="video/mp4" />
+        <form class="upload-form-area">
+          <input
+            type="file"
+            id="file_name"
+            name="file"
+            accept="video/mp4"
+            class="video-input"
+          />
           <input
             type="text"
             id="user_id"
             name="user_id"
             placeholder="ユーザーID"
+            class="user-id-input"
           />
-          <button type="submit">アップロード</button>
+          <button type="submit" class="upload-btn">アップロード</button>
         </form>
+        <h2 class="select-prompt-text">プロンプトを選択</h2>
+        <p class="no-prompt-text">
+          プロンプトがありません。プロンプトを作成してください。
+        </p>
+        <ul class="prompt-title-list"></ul>
+        <a href="/create-prompt" class="create-prompt-link"
+          >プロンプトを新規作成</a
+        >
+        <a href="/edit-prompt" class="edit-prompt-link">プロンプトを編集</a>
       </section>
     </main>
 
     <script>
+      const isEmpty = (obj) => {
+        return Object.keys(obj).length === 0;
+      };
+
+      const selectPrompt = (event, gijirokuPrompt, mailPrompt) => {
+        const form = document.querySelector("form");
+        let promptInput = document.getElementById("prompt");
+        if (!promptInput) {
+          promptInput = document.createElement("input");
+        }
+        promptInput.setAttribute("type", "hidden");
+        promptInput.setAttribute("name", "prompt");
+        promptInput.setAttribute("id", "prompt");
+        promptInput.setAttribute("gijirokuPrompt", gijirokuPrompt);
+        promptInput.setAttribute("mailPrompt", mailPrompt);
+        form.appendChild(promptInput);
+
+        const buttons = document.querySelectorAll(
+          ".prompt-title-list li button"
+        );
+        buttons.forEach((button) => {
+          button.dataset.active = "false";
+        });
+        event.target.dataset.active = "true";
+      };
+
+      window.addEventListener("load", () => {
+        const variables = localStorage.getItem("variables");
+        const parsedVariables = JSON.parse(variables);
+        if (variables && !isEmpty(parsedVariables)) {
+          const noPromptText = document.querySelector(".no-prompt-text");
+          noPromptText.style.display = "none";
+
+          const keys = Object.keys(parsedVariables);
+          keys.forEach((key) => {
+            const li = document.createElement("li");
+            const button = document.createElement("button");
+            button.dataset.active = "false";
+            const gijirokuPrompt = parsedVariables[key].gijirokuPrompt;
+            const mailPrompt = parsedVariables[key].mailPrompt;
+            button.addEventListener("click", (e) =>
+              selectPrompt(e, gijirokuPrompt, mailPrompt)
+            );
+            button.textContent = key;
+            li.appendChild(button);
+
+            const promptList = document.querySelector(".prompt-title-list");
+            promptList.appendChild(li);
+          });
+        }
+
         const loadingContent = document.querySelector(".loading-content");
         const mainContent = document.querySelector(".main-content");
         const form = mainContent.querySelector("form");
@@ -33,11 +101,15 @@
           e.preventDefault();
           const fileInput = document.getElementById("file_name");
           const userId = document.getElementById("user_id").value;
+          const prompt = document.getElementById("prompt");
           const file = fileInput.files[0];
-          if (!file || !userId) {
-            alert("ファイルまたはユーザーIDが入力されていません。");
+          if (!file || !userId || !prompt) {
+            alert("ファイルまたはユーザーID、プロンプトが選択されていません。");
             return;
           }
+  
+          const gijirokuPrompt = prompt.getAttribute("gijirokuPrompt");
+          const mailPrompt = prompt.getAttribute("mailPrompt");
   
           const encodedFileName = encodeURIComponent(file.name);
           const renamedFile = new File([file], encodedFileName, {
@@ -46,6 +118,8 @@
           const formData = new FormData();
           formData.append("file", renamedFile);
           formData.append("userId", userId);
+          formData.append("gijirokuPrompt", gijirokuPrompt);
+          formData.append("mailPrompt", mailPrompt);
   
           try {
             loadingContent.style.display = "block";
@@ -75,6 +149,8 @@
             return;
           }
         });
-      </script>
+      });
+
+    </script>
   </body>
 </html>

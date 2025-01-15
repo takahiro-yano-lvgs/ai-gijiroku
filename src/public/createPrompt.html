@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/css/createPrompt.css" />
+    <title>ai-gijiroku</title>
+  </head>
+  <body>
+    <main>
+      <h1>プロンプトを新規作成</h1>
+      <form class="create-prompt-form-area">
+        <div class="create-prompt-form-block">
+          <div class="form-item-wrapper">
+            <label for="title">タイトル</label>
+            <input type="text" id="title" name="title" class="title-input" />
+          </div>
+          <div class="form-item-wrapper">
+            <label for="gijiroku">議事録のプロンプト</label>
+            <textarea
+              type="text"
+              id="gijiroku"
+              name="gijiroku"
+              class="gijiroku-prompt-input"
+            ></textarea>
+          </div>
+          <div class="form-item-wrapper">
+            <label for="mail">メールのプロンプト</label>
+            <textarea
+              type="text"
+              id="mail"
+              name="mail"
+              class="mail-prompt-input"
+            ></textarea>
+          </div>
+        </div>
+        <button type="submit" class="create-btn">作成</button>
+      </form>
+      <a href="/" class="back-link">戻る</a>
+    </main>
+
+    <script>
+      const form = document.querySelector(".create-prompt-form-area");
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const titleEl = document.getElementById("title");
+        const gijirokuEl = document.getElementById("gijiroku");
+        const mailEl = document.getElementById("mail");
+
+        const title = titleEl.value;
+        const gijiroku = gijirokuEl.value;
+        const mail = mailEl.value;
+
+        if (!title || !gijiroku || !mail) {
+          alert("タイトルまたはプロンプトが入力されていません。");
+          return;
+        }
+
+        const isEmpty = (obj) => {
+          return Object.keys(obj).length === 0;
+        };
+
+        const variables = localStorage.getItem("variables");
+        const parsedVariables = JSON.parse(variables);
+        if (variables && !isEmpty(parsedVariables)) {
+          if (parsedVariables[title]) {
+            if (confirm("同名のプロンプトがあります。上書きしますか？")) {
+              localStorage.setItem(
+                "variables",
+                JSON.stringify({
+                  ...parsedVariables,
+                  [title]: {
+                    gijirokuPrompt: gijiroku,
+                    mailPrompt: mail,
+                  },
+                })
+              );
+            }
+          } else {
+            localStorage.setItem(
+              "variables",
+              JSON.stringify({
+                ...parsedVariables,
+                [title]: {
+                  gijirokuPrompt: gijiroku,
+                  mailPrompt: mail,
+                },
+              })
+            );
+          }
+        } else {
+          const promptList = {};
+          promptList[title] = {
+            gijirokuPrompt: gijiroku,
+            mailPrompt: mail,
+          };
+          localStorage.setItem("variables", JSON.stringify(promptList));
+        }
+
+        titleEl.value = "";
+        gijirokuEl.value = "";
+        mailEl.value = "";
+      });
+    </script>
+  </body>
+</html>

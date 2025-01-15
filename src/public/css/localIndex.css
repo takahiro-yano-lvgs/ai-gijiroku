@@ -1,0 +1,113 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+li {
+  list-style: none;
+}
+
+input {
+  border: none;
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+body {
+  margin: 16px;
+}
+
+.loading-content {
+  display: none;
+}
+
+.upload-form-area {
+  display: flex;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.video-input,
+.user-id-input,
+.upload-btn {
+  display: flex;
+  align-items: center;
+}
+
+.video-input {
+  cursor: pointer;
+}
+
+.user-id-input {
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+.upload-btn {
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  background-color: #0078d7;
+  color: #fff;
+}
+
+.upload-btn:hover,
+.create-prompt-link:hover,
+.edit-prompt-link:hover {
+  background-color: #0056b3;
+}
+
+.select-prompt-text {
+  font-size: large;
+  margin-bottom: 20px;
+}
+
+.no-prompt-text {
+  font-size: 14px;
+  color: #ccc;
+}
+
+.prompt-title-list {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+button[data-active="true"] {
+  background-color: #d3ebff;
+}
+
+.prompt-title-list > li > button:hover {
+  background-color: #d3ebff;
+}
+
+.prompt-title-list > li > button {
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+.create-prompt-link,
+.edit-prompt-link {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  background-color: #0078d7;
+  color: #fff;
+  font-size: 13px;
+  margin-top: 40px;
+}

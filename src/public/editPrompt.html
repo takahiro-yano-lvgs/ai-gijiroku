@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/css/editPrompt.css" />
+    <title>ai-gijiroku</title>
+  </head>
+  <body>
+    <main>
+      <h1>プロンプトを編集</h1>
+      <ul class="prompt-list"></ul>
+      <form class="form">
+        <div class="input-block">
+          <div class="input-wrapper">
+            <label for="title">タイトル</label>
+            <input type="text" id="title" name="title" class="title" />
+          </div>
+          <div class="input-wrapper">
+            <label for="gijiroku">議事録のプロンプト</label>
+            <textarea
+              type="text"
+              id="gijiroku"
+              name="gijiroku"
+              class="gijiroku"
+            ></textarea>
+          </div>
+          <div class="input-wrapper">
+            <label for="mail">メールのプロンプト</label>
+            <textarea type="text" id="mail" name="mail" class="mail"></textarea>
+          </div>
+        </div>
+        <button type="submit" class="save-button">保存</button>
+      </form>
+      <a href="/" class="back-link">戻る</a>
+    </main>
+
+    <script>
+      const form = document.querySelector("form");
+      let activeKey;
+      const selectPrompt = (event, gijirokuPrompt, mailPrompt, key) => {
+        activeKey = key;
+        form.style.display = "block";
+
+        const titleEl = document.getElementById("title");
+        const gijirokuEl = document.getElementById("gijiroku");
+        const mailEl = document.getElementById("mail");
+        titleEl.value = key;
+        gijirokuEl.value = gijirokuPrompt;
+        mailEl.value = mailPrompt;
+
+        const buttons = document.querySelectorAll(".prompt-list li button");
+        buttons.forEach((button) => {
+          button.dataset.active = "false";
+        });
+        event.target.dataset.active = "true";
+      };
+
+      const deletePrompt = (event, key) => {
+        event.stopPropagation();
+
+        const variables = localStorage.getItem("variables");
+        const parsedVariables = JSON.parse(variables);
+        delete parsedVariables[key];
+        localStorage.setItem(
+          "variables",
+          JSON.stringify({
+            ...parsedVariables,
+          })
+        );
+        location.reload();
+      };
+
+      window.addEventListener("load", () => {
+        const variables = localStorage.getItem("variables");
+        if (variables) {
+          const promptList = document.querySelector(".prompt-list");
+          const parsedVariables = JSON.parse(variables);
+          const keys = Object.keys(parsedVariables);
+          keys.forEach((key) => {
+            const li = document.createElement("li");
+            li.setAttribute("class", "prompt-item");
+            const selectButton = document.createElement("button");
+            selectButton.setAttribute("class", "select-button");
+            const deleteButton = document.createElement("button");
+            deleteButton.setAttribute("class", "delete-button");
+            selectButton.dataset.active = "false";
+            selectButton.addEventListener("click", (e) =>
+              selectPrompt(
+                e,
+                parsedVariables[key].gijirokuPrompt,
+                parsedVariables[key].mailPrompt,
+                key
+              )
+            );
+            selectButton.textContent = key;
+            deleteButton.addEventListener("click", (e) => deletePrompt(e, key));
+            deleteButton.textContent = "×";
+            selectButton.appendChild(deleteButton);
+            li.appendChild(selectButton);
+            promptList.appendChild(li);
+          });
+        }
+      });
+
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const title = document.getElementById("title").value;
+        const gijiroku = document.getElementById("gijiroku").value;
+        const mail = document.getElementById("mail").value;
+
+        const variables = localStorage.getItem("variables");
+        const parsedVariables = JSON.parse(variables);
+        delete parsedVariables[activeKey];
+        localStorage.setItem(
+          "variables",
+          JSON.stringify({
+            ...parsedVariables,
+            [title]: {
+              gijirokuPrompt: gijiroku,
+              mailPrompt: mail,
+            },
+          })
+        );
+        location.reload();
+      });
+    </script>
+  </body>
+</html>
