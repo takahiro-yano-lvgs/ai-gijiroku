@@ -228,7 +228,7 @@ const generateContent = async (inputDir: string, outputDir: string, prompt: stri
   }
 };
 
-const postGijirokuAndMailToSlack = async (userId: string) => {
+const postTranscriptionAndGijirokuAndMailToSlack = async (userId: string, isTranscription: boolean) => {
   const gijirokuFiles = fs.readdirSync(GIJIROKU_DIR);
   const gijirokuFilePath = path.join(GIJIROKU_DIR, gijirokuFiles[0]);
   const gijiroku = fs.readFileSync(gijirokuFilePath, "utf8");
@@ -237,13 +237,15 @@ const postGijirokuAndMailToSlack = async (userId: string) => {
   const mailFilePath = path.join(MAIL_DIR, mailFiles[0]);
   const mail = fs.readFileSync(mailFilePath, "utf8");
 
-  // const transcriptionFile = fs.readdirSync(TRANSCRIPTION_DIR);
-  // const transcriptionFilePath = path.join(TRANSCRIPTION_DIR, transcriptionFile[0]);
-  // const transcription = fs.readFileSync(transcriptionFilePath, "utf8");
+  if (isTranscription) {
+    const transcriptionFile = fs.readdirSync(TRANSCRIPTION_DIR);
+    const transcriptionFilePath = path.join(TRANSCRIPTION_DIR, transcriptionFile[0]);
+    const transcription = fs.readFileSync(transcriptionFilePath, "utf8");
+    postSlack(userId, transcription);
+  }
 
   postSlack(userId, gijiroku);
   postSlack(userId, mail);
-  // postSlack(userId, transcription);
 };
 
 // 静的サイトはs3にホスティング
@@ -268,7 +270,7 @@ app.get("/complete", (req, res) => {
 
 // s3に動画がアップロードされたら実行されるlambda関数
 app.post("/api/videos", upload.single("file"), async (req, res) => {
-  const { userId, gijirokuPrompt, mailPrompt } = req.body;
+  const { userId, gijirokuPrompt, mailPrompt, isTranscription } = req.body;
 
   try {
     if (!userId || userId.length !== SLACK_ID_LENGTH) {
@@ -280,7 +282,7 @@ app.post("/api/videos", upload.single("file"), async (req, res) => {
     await convertToText();
     await generateContent(TRANSCRIPTION_DIR, GIJIROKU_DIR, gijirokuPrompt);
     await generateContent(GIJIROKU_DIR, MAIL_DIR, mailPrompt);
-    await postGijirokuAndMailToSlack(userId);
+    await postTranscriptionAndGijirokuAndMailToSlack(userId, isTranscription);
   } catch (error: unknown) {
     if (error instanceof Error) {
       postSlack(userId, `${error.message}\n再度アップロードしてください`);

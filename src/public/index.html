@@ -3,80 +3,179 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/css/localIndex.css" />
     <title>ai-gijiroku</title>
   </head>
   <body>
     <main>
-      <section class="loading-content" style="display: none">
+      <section class="loading-content">
         <h1>アップロード中・・・</h1>
       </section>
       <section class="main-content">
         <h1>動画をアップロード</h1>
-        <form>
-          <input type="file" id="file_name" name="file" accept="video/mp4" />
+        <form class="upload-form-area">
+          <input
+            type="file"
+            id="file_name"
+            name="file"
+            accept="video/mp4"
+            class="video-input"
+          />
           <input
             type="text"
             id="user_id"
             name="user_id"
             placeholder="ユーザーID"
+            class="user-id-input"
           />
-          <button type="submit">アップロード</button>
+          <button type="submit" class="upload-btn">アップロード</button>
         </form>
+        <h2 class="is-transcription">文字起こしの有無</h2>
+        <label for="toggle" class="toggle-label"></label>
+        <input type="checkbox" id="is_transcription" class="toggle-input">
+        <h2 class="select-prompt-text">プロンプトを選択</h2>
+        <p class="no-prompt-text">
+          プロンプトがありません。プロンプトを作成してください。
+        </p>
+        <ul class="prompt-title-list"></ul>
+        <a href="/create-prompt" class="create-prompt-link"
+          >プロンプトを新規作成</a
+        >
+        <a href="/edit-prompt" class="edit-prompt-link">プロンプトを編集</a>
       </section>
     </main>
 
     <script>
-      const loadingContent = document.querySelector(".loading-content");
-      const mainContent = document.querySelector(".main-content");
-      const form = mainContent.querySelector("form");
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const fileInput = document.getElementById("file_name");
-        const userId = document.getElementById("user_id").value;
-        const file = fileInput.files[0];
-        if (!file || !userId) {
-          alert("ファイルまたはユーザーIDが入力されていません。");
-          return;
+      const isEmpty = (obj) => {
+        return Object.keys(obj).length === 0;
+      };
+
+      const selectPrompt = (event, gijirokuPrompt, mailPrompt) => {
+        const form = document.querySelector("form");
+        let promptInput = document.getElementById("prompt");
+        if (!promptInput) {
+          promptInput = document.createElement("input");
         }
+        promptInput.setAttribute("type", "hidden");
+        promptInput.setAttribute("name", "prompt");
+        promptInput.setAttribute("id", "prompt");
+        promptInput.setAttribute("gijirokuPrompt", gijirokuPrompt);
+        promptInput.setAttribute("mailPrompt", mailPrompt);
+        form.appendChild(promptInput);
 
-        const encodedFileName = encodeURIComponent(file.name);
-        const renamedFile = new File([file], encodedFileName, {
-          type: file.type,
+        const buttons = document.querySelectorAll(
+          ".prompt-title-list li button"
+        );
+        buttons.forEach((button) => {
+          button.dataset.active = "false";
         });
+        event.target.dataset.active = "true";
+      };
 
-        try {
-          loadingContent.style.display = "block";
-          mainContent.style.display = "none";
-          const s3PresignedUrlResponse = await fetch(
-            "https://75331cuiw3.execute-api.ap-northeast-1.amazonaws.com/dev/presigned-url",
-            {
-              method: "POST",
-              body: JSON.stringify({ userId, filename: file.name }),
-            }
-          );
+      window.addEventListener("load", () => {
+        const variables = localStorage.getItem("variables");
+        const parsedVariables = JSON.parse(variables);
+        if (variables && !isEmpty(parsedVariables)) {
+          const noPromptText = document.querySelector(".no-prompt-text");
+          noPromptText.style.display = "none";
 
-          if (!s3PresignedUrlResponse.ok) {
-            throw new Error("アップロード先のURLの取得に失敗しました");
-          }
+          const keys = Object.keys(parsedVariables);
+          keys.forEach((key) => {
+            const li = document.createElement("li");
+            const button = document.createElement("button");
+            button.dataset.active = "false";
+            const gijirokuPrompt = parsedVariables[key].gijirokuPrompt;
+            const mailPrompt = parsedVariables[key].mailPrompt;
+            button.addEventListener("click", (e) =>
+              selectPrompt(e, gijirokuPrompt, mailPrompt)
+            );
+            button.textContent = key;
+            li.appendChild(button);
 
-          const s3PresignedUrl = await s3PresignedUrlResponse.text();
-          const uploadResult = await fetch(s3PresignedUrl, {
-            method: "PUT",
-            body: renamedFile,
+            const promptList = document.querySelector(".prompt-title-list");
+            promptList.appendChild(li);
           });
-
-          if (!uploadResult.ok) {
-            const errorText = await response.text();
-            throw new Error(errorText);
-          } else {
-            window.location.href = "/complete";
+        }
+        const loadingContent = document.querySelector(".loading-content");
+        const mainContent = document.querySelector(".main-content");
+        const form = mainContent.querySelector("form");
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const fileInput = document.getElementById("file_name");
+          const userId = document.getElementById("user_id").value;
+          const prompt = document.getElementById("prompt");
+          const file = fileInput.files[0];
+          if (!file || !userId || !prompt) {
+            alert("ファイルまたはユーザーID、プロンプトが選択されていません。");
             return;
           }
-        } catch (error) {
-          alert(`アップロードに失敗しました。${error.message}`);
-          window.location.href = "/";
-          return;
-        }
+
+          const gijirokuPrompt = prompt.getAttribute("gijirokuPrompt");
+          const mailPrompt = prompt.getAttribute("mailPrompt");
+          const isTranscription = document.getElementById("is_transcription").checked;
+
+          const encodedFileName = encodeURIComponent(file.name);
+          const renamedFile = new File([file], encodedFileName, {
+            type: file.type,
+          });
+
+          try {
+            loadingContent.style.display = "block";
+            mainContent.style.display = "none";
+            const s3PresignedUrlResponse = await fetch(
+              "https://75331cuiw3.execute-api.ap-northeast-1.amazonaws.com/dev/presigned-url",
+              {
+                method: "POST",
+                body: JSON.stringify({ userId, isTranscription, filename: file.name }),
+              }
+            );
+
+            if (!s3PresignedUrlResponse.ok) {
+              throw new Error("アップロード先のURLの取得に失敗しました");
+            }
+
+            const s3PresignedUrl = await s3PresignedUrlResponse.text();
+            const { gijirokuPromptUrl, mailPromptUrl, videoUrl } =
+              JSON.parse(s3PresignedUrl);
+            console.log(gijirokuPromptUrl);
+            console.log(mailPromptUrl);
+            console.log(videoUrl);
+
+            const uploadGijirokuPromptResult = fetch(gijirokuPromptUrl, {
+              method: "PUT",
+              body: gijirokuPrompt,
+            });
+
+            const uploadMailPromptResult = fetch(mailPromptUrl, {
+              method: "PUT",
+              body: mailPrompt,
+            });
+
+            Promise.all([uploadGijirokuPromptResult, uploadMailPromptResult])
+              .then((response) => {
+                fetch(videoUrl, {
+                  method: "PUT",
+                  body: renamedFile,
+                })
+                  .then((response) => {
+                    if (response.ok) {
+                      window.location.href = "/complete";
+                      return;
+                    }
+                  })
+                  .catch((err) => {
+                    throw new Error("予期せぬエラーが発生しました。");
+                  });
+              })
+              .catch((err) => {
+                throw new Error("予期せぬエラーが発生しました。");
+              });
+          } catch (error) {
+            alert(`アップロードに失敗しました。${error.message}`);
+            window.location.href = "/";
+            return;
+          }
+        });
       });
     </script>
   </body>

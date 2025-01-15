@@ -30,6 +30,9 @@
           />
           <button type="submit" class="upload-btn">アップロード</button>
         </form>
+        <h2 class="is-transcription">文字起こしの有無</h2>
+        <label for="toggle" class="toggle-label"></label>
+        <input type="checkbox" id="is_transcription" class="toggle-input">
         <h2 class="select-prompt-text">プロンプトを選択</h2>
         <p class="no-prompt-text">
           プロンプトがありません。プロンプトを作成してください。
@@ -107,10 +110,11 @@
             alert("ファイルまたはユーザーID、プロンプトが選択されていません。");
             return;
           }
-  
+
           const gijirokuPrompt = prompt.getAttribute("gijirokuPrompt");
           const mailPrompt = prompt.getAttribute("mailPrompt");
-  
+          const isTranscription = document.getElementById("is_transcription").checked;
+
           const encodedFileName = encodeURIComponent(file.name);
           const renamedFile = new File([file], encodedFileName, {
             type: file.type,
@@ -120,7 +124,8 @@
           formData.append("userId", userId);
           formData.append("gijirokuPrompt", gijirokuPrompt);
           formData.append("mailPrompt", mailPrompt);
-  
+          formData.append("isTranscription", isTranscription);
+
           try {
             loadingContent.style.display = "block";
             mainContent.style.display = "none";
@@ -128,12 +133,12 @@
               method: "POST",
               body: formData,
             });
-  
+
             if (!response.ok) {
               const errorText = await response.text();
               throw new Error(errorText);
             }
-  
+
             if (response.redirected) {
               window.location.href = response.url;
             } else {
@@ -150,7 +155,6 @@
           }
         });
       });
-
     </script>
   </body>
 </html>
